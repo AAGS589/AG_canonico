@@ -120,7 +120,110 @@ class AG(QMainWindow):
                 parejas.append([[individuo['binario']], [individuo_skip['binario']]])
         print("PAREJAS GENERADAS: ", parejas)
     
+    def seleccionarParejasCruza(self, probabilidad_de_cruza):
+        parejas = self.generarParejasPoblacion()
+        probabilidades_aletorio = []
+
+        for _ in range(len(parejas)):
+            aleatorio_decimal = random.uniform(0.01, 1.0)
+            aleatorio_decimal_redondeado = round(aleatorio_decimal, 2)
+            probabilidades_aletorio.append(aleatorio_decimal_redondeado)
+
+        posicion = 0
+        while posicion < len(parejas):
+            if probabilidades_aletorio[posicion] > probabilidad_de_cruza:
+                parejas.pop(posicion)
+            else:
+                posicion = posicion + 1
+
+        print("PAREJAS SELECCIONADAS: ", parejas)
+        return parejas
     
+    def calcularValorX(self, numero_rand_asignado, inicio_intervalo, precision_deta_dex):
+        x = inicio_intervalo + numero_rand_asignado * precision_deta_dex   
+        return x
+    
+    def calcularAptitud(self, x):
+        fx = 1 - (x - 0.5)**2 / (1.5)**2 + (x - 1)**3 / (1.6)**2
+        return fx
+
+    def realizarCruza(self, parejas, num_bits):
+        hijos = []
+        punto_cruza = int(num_bits / 2)
+
+        for pareja in parejas:
+            self.id_individuo += 1
+            individuo_pareja1 = pareja[0][0]
+            individuo_pareja2 = pareja[1][0]
+
+            hijo1 = individuo_pareja1[:punto_cruza] + individuo_pareja2[punto_cruza:]
+            hijo2 = individuo_pareja2[:punto_cruza] + individuo_pareja1[punto_cruza:]
+
+            hijos.append(["Individuo", self.id_individuo, self.binario_a_decimal(hijo1), hijo1])
+            self.id_individuo += 1
+            hijos.append(["Individuo", self.id_individuo, self.binario_a_decimal(hijo2), hijo2])
+
+        print("HIJOS: ", hijos)
+        return hijos
+
+    def verificarHijos(self, hijos, intervalo):
+        hijos_aceptados = []
+
+        for hijo in hijos:
+            num_entero = hijo[2]
+            x = self.calcular_x(num_entero)
+            if num_entero > 0 and x >= intervalo[0] and x <= intervalo[1]:
+                hijos_aceptados.append(hijo)
+        
+        hijos.clear()
+
+        for hijo_aceptado in hijos_aceptados:
+            hijos.append(hijo_aceptado)
+            num_individuo = hijo_aceptado[1]
+            num_entero = hijo_aceptado[2]
+            num_binario = hijo_aceptado[3]
+            self.insertar_individuos_a_poblacion(num_individuo, num_entero, num_binario)
+
+        print("HIJOS DESPUES DE LA VERIFICACION:", hijos)
+
+    def binarioADecimal(self, numero_binario):
+        numero_decimal = 0
+
+        for posicion, digito_string in enumerate(numero_binario[::-1]):
+            numero_decimal += int(digito_string) * 2 ** posicion
+
+        return numero_decimal
+    
+    def seleccionHijosMutacion(self):
+        probabilidades_aletorio = []
+
+        for i in range(len(self.hijos)):
+            aleatorio_decimal = random.uniform(0.01, 1.0)
+            aleatorio_decimal_redondeado = round(aleatorio_decimal, 2)
+            probabilidades_aletorio.append(aleatorio_decimal_redondeado)
+
+
+    def seleccionHijosMutacion(self):
+        probabilidades_aletorio = []
+
+        for i in range(len(self.hijos)):
+            aleatorio_decimal = random.uniform(0.01, 1.0)
+            aleatorio_decimal_redondeado = round(aleatorio_decimal, 2)
+            probabilidades_aletorio.append(aleatorio_decimal_redondeado)
+
+        posicion = 0
+        self.seleccion_hijos = []
+        self.indice_hijos_seleccionados = []
+        
+        while posicion < len(self.hijos):
+            if probabilidades_aletorio[posicion] < self.prob_mutacion_individuo:
+                self.seleccion_hijos.append(self.hijos[posicion])
+                self.indice_hijos_seleccionados.append(posicion)
+                self.hijos.pop(posicion)
+            else:
+                posicion = posicion + 1
+
+        print("HIJOS SELECCIONADOS:", self.seleccion_hijos)
 
     def graficarFuncion(self):
         # Implementación de la función para graficar la función objetivo
