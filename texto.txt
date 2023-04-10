@@ -1,9 +1,0 @@
-P0 = []
-Pmax = 20
-xMin = -5
-xMax = 5
-resolution = 0.01
-N = 100
-p_cruza = 0.8
-p_mut_ind = 0.1
-p_mut_gen = 0.5
