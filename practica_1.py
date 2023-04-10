@@ -1,5 +1,6 @@
 import random
 from random import sample
+import numpy as np
 import math
 import matplotlib.pyplot as plt
 import pandas as pd 
@@ -16,14 +17,14 @@ class AG(QMainWindow):
         super().__init__()
         uic.loadUi("estilos.ui",self)
         self.inicioIntervalo.setText ("5")
-        self.finalIntervalo.setText("10")
-        self.pob_inicial.setText("5")
-        self.pob_maxima.setText("10")
-        self.num_generaciones.setText("20")
+        self.finalIntervalo.setText("15")
+        self.pob_inicial.setText("10")
+        self.pob_maxima.setText("50")
+        self.num_generaciones.setText("100")
         self.presicion_input.setText("0.01")
-        self.prob_cruza.setText("0.2")
-        self.prob_mutacion_individuo.setText("0.2")
-        self.prob_mutacion_gen.setText("0.2")
+        self.prob_cruza.setText("0.8")
+        self.prob_mutacion_individuo.setText("0.1")
+        self.prob_mutacion_gen.setText("0.1")
         #Checkboxes
         self.radio_maximizar = self.findChild(QRadioButton, 'radio_maximizar')
         self.radio_minimizar = self.findChild(QRadioButton, 'radio_minimizar')
@@ -33,65 +34,72 @@ class AG(QMainWindow):
         self.btn_graficar_funcion.clicked.connect(self.graficarFuncion)
         self.btn_graficar_aptitud.clicked.connect(self.GraficarAptitud)
         
+        
         self.individuos = []
         self.poblacion = []
         self.id_individuo = 0
-    
-    def iniciarAlgoritmo(self):
-        try:
-            # Obtener y validar los valores ingresados por el usuario
-            inicio_intervalo = int(self.inicioIntervalo.text())
-            final_intervalo = int(self.finalIntervalo.text())
-            pob_inicial = int(self.pob_inicial.text())
-            pob_maxima = int(self.pob_maxima.text())
-            num_generaciones = int(self.num_generaciones.text())
-            presicion_input = float(self.presicion_input.text())
-            prob_cruza = float(self.prob_cruza.text())
-            prob_mutacion_individuo = float(self.prob_mutacion_individuo.text())
-            prob_mutacion_gen = float(self.prob_mutacion_gen.text())
-
-            if inicio_intervalo >= final_intervalo:
-                raise ValueError("El inicio del intervalo debe ser menor que el final del intervalo.")
-            
-            if pob_inicial <= 0 or pob_maxima <= 0 or num_generaciones <= 0:
-                raise ValueError("La población inicial, la población máxima y el número de generaciones deben ser mayores que 0.")
-            
-            if presicion_input >= 1:
-                raise ValueError("La precisión debe ser menor a 1.")
-            
-            if not (0 <= prob_cruza <= 1) or not (0 <= prob_mutacion_individuo <= 1) or not (0 <= prob_mutacion_gen <= 1):
-                raise ValueError("Las probabilidades de cruza, mutación del individuo y mutación del gen deben estar en el rango [0, 1].")
-
-            # Limpiar el mensaje de error
-            self.msj_error.setText("")
-
-            # Verificar si se debe maximizar o minimizar la función
-            if self.radio_maximizar.isChecked():
-                objetivo = "maximizar"
-            else:
-                objetivo = "minimizar"
-            
-            num_bits = self.cantidadDeBits(inicio_intervalo, final_intervalo, presicion_input)
-            
-             # Calcular el rango de los individuos
-            rango = final_intervalo - inicio_intervalo
+        self.generacion = 0
+        self.generaciones = []
+        self.mejor_x_generacion = []
+        self.aptitudes = []
+        inicio_intervalo = float(self.inicioIntervalo.text())
+        final_intervalo = float(self.finalIntervalo.text())
+        self.intervalo = (inicio_intervalo, final_intervalo)
         
-            # Generar la población inicial
-            self.generarPoblacionInicial(rango, pob_inicial, num_bits)
-        except ValueError as e:
-            # Mostrar el mensaje de error en el QLabel
-            self.msj_error.setText(str(e))
 
-        except Exception as e:
-             # Mostrar un mensaje de error genérico en el QLabel
-            self.msj_error.setText("Error: Por favor, revisa los valores ingresados.")
-            print(e)
-    
+    def iniciarAlgoritmo(self):
+        self.limpiarDatos()
+        inicio_intervalo = float(self.inicioIntervalo.text())
+        final_intervalo = float(self.finalIntervalo.text())
+        pob_inicial = int(self.pob_inicial.text())
+        pob_maxima = int(self.pob_maxima.text())
+        num_generaciones = int(self.num_generaciones.text())
+        presicion_input = float(self.presicion_input.text())
+        prob_cruza = float(self.prob_cruza.text())
+        prob_mutacion_individuo = float(self.prob_mutacion_individuo.text())
+        prob_mutacion_gen = float(self.prob_mutacion_gen.text())
+
+        num_bits = self.cantidadDeBits(inicio_intervalo, final_intervalo, presicion_input)
+
+        self.generarPoblacionInicial(2 ** num_bits - 1, pob_inicial, num_bits)
+        minimizar = self.radio_minimizar.isChecked()
+        
+        self.mejor_x_generacion = []
+        self.generaciones = []
+        self.generacion = 0
+
+        for _ in range(num_generaciones):
+            parejas = self.seleccionarParejasCruza(prob_cruza)
+
+            hijos = self.realizarCruza(parejas, num_bits)
+
+            self.verificarHijos(hijos, (inicio_intervalo, final_intervalo), presicion_input)
+            hijos_mutantes = self.seleccionHijosMutacion(prob_mutacion_individuo)
+
+            self.mutacionHijos(prob_mutacion_gen, inicio_intervalo, final_intervalo, presicion_input)
+
+            self.podaPoblacion(pob_maxima, inicio_intervalo, presicion_input, minimizar)
+
+            mejor_individuo = self.poblacion[0]
+
+            x_mejor = self.calcularValorX(mejor_individuo['entero'], inicio_intervalo, presicion_input)
+            self.mejor_x_generacion.append(x_mejor)
+            self.generaciones.append(self.generacion)
+            self.generacion += 1
+
+        mejor_individuo = self.poblacion[0]
+        x_mejor = self.calcularValorX(mejor_individuo['entero'], inicio_intervalo, presicion_input)
+        aptitud_mejor = self.calcularAptitud(x_mejor)
+
+        print(f"Mejor individuo: {mejor_individuo}")
+        print(f"Mejor x: {x_mejor}")
+        print(f"Mejor aptitud: {aptitud_mejor}")
+
     def cantidadDeBits(self, inicio_intervalo, final_intervalo, presicion_input):
         rango = final_intervalo - inicio_intervalo
         num_valores = rango * (10 ** presicion_input)
         num_bits = math.ceil(math.log2(num_valores))
-        #print("Cantidad de bits necesarios:", num_bits)
+        print("Cantidad de bits necesarios:", num_bits)
         return num_bits
 
     def generarPoblacionInicial(self, rango, pob_inicial, num_bits):
@@ -110,7 +118,6 @@ class AG(QMainWindow):
     def insertar_individuos_a_poblacion(self, id_individuo, individuo_en_entero, individuo_en_bin):
         self.poblacion.append({"id": id_individuo, "entero": individuo_en_entero, "binario": individuo_en_bin})
 
-    
     def generarParejasPoblacion(self):
         parejas = []
         for i in range(0, len(self.poblacion) - 1):
@@ -118,7 +125,8 @@ class AG(QMainWindow):
                 individuo = self.poblacion[i]
                 individuo_skip = self.poblacion[j + 1]
                 parejas.append([[individuo['binario']], [individuo_skip['binario']]])
-        print("PAREJAS GENERADAS: ", parejas)
+        #print("PAREJAS GENERADAS: ", parejas)
+        return parejas
     
     def seleccionarParejasCruza(self, probabilidad_de_cruza):
         parejas = self.generarParejasPoblacion()
@@ -136,15 +144,16 @@ class AG(QMainWindow):
             else:
                 posicion = posicion + 1
 
-        print("PAREJAS SELECCIONADAS: ", parejas)
+        #print("PAREJAS SELECCIONADAS: ", parejas)
         return parejas
     
     def calcularValorX(self, numero_rand_asignado, inicio_intervalo, precision_deta_dex):
-        x = inicio_intervalo + numero_rand_asignado * precision_deta_dex   
+        x = inicio_intervalo + numero_rand_asignado * precision_deta_dex
         return x
     
     def calcularAptitud(self, x):
         fx = 1 - (x - 0.5)**2 / (1.5)**2 + (x - 1)**3 / (1.6)**2
+        self.aptitudes.append(fx) 
         return fx
 
     def realizarCruza(self, parejas, num_bits):
@@ -159,19 +168,20 @@ class AG(QMainWindow):
             hijo1 = individuo_pareja1[:punto_cruza] + individuo_pareja2[punto_cruza:]
             hijo2 = individuo_pareja2[:punto_cruza] + individuo_pareja1[punto_cruza:]
 
-            hijos.append(["Individuo", self.id_individuo, self.binario_a_decimal(hijo1), hijo1])
+            hijos.append(["Individuo", self.id_individuo, self.binarioADecimal(hijo1), hijo1])
             self.id_individuo += 1
-            hijos.append(["Individuo", self.id_individuo, self.binario_a_decimal(hijo2), hijo2])
+            hijos.append(["Individuo", self.id_individuo, self.binarioADecimal(hijo2), hijo2])
 
-        print("HIJOS: ", hijos)
+        #print("HIJOS: ", hijos)
         return hijos
 
-    def verificarHijos(self, hijos, intervalo):
+    def verificarHijos(self, hijos, intervalo, presicion_input):
         hijos_aceptados = []
 
         for hijo in hijos:
             num_entero = hijo[2]
-            x = self.calcular_x(num_entero)
+            # Pasar los argumentos faltantes a la función calcularValorX
+            x = self.calcularValorX(num_entero, intervalo[0], presicion_input)
             if num_entero > 0 and x >= intervalo[0] and x <= intervalo[1]:
                 hijos_aceptados.append(hijo)
         
@@ -184,54 +194,80 @@ class AG(QMainWindow):
             num_binario = hijo_aceptado[3]
             self.insertar_individuos_a_poblacion(num_individuo, num_entero, num_binario)
 
-        print("HIJOS DESPUES DE LA VERIFICACION:", hijos)
-
-    def binarioADecimal(self, numero_binario):
-        numero_decimal = 0
-
-        for posicion, digito_string in enumerate(numero_binario[::-1]):
-            numero_decimal += int(digito_string) * 2 ** posicion
-
-        return numero_decimal
+        #print("HIJOS DESPUES DE LA VERIFICACION:", hijos)
     
-    def seleccionHijosMutacion(self):
-        probabilidades_aletorio = []
+    def binarioADecimal(self, binario):
+        decimal = int(binario, 2)
+        return decimal
 
-        for i in range(len(self.hijos)):
-            aleatorio_decimal = random.uniform(0.01, 1.0)
-            aleatorio_decimal_redondeado = round(aleatorio_decimal, 2)
-            probabilidades_aletorio.append(aleatorio_decimal_redondeado)
+    def seleccionHijosMutacion(self, prob_mutacion_individuo):
+        hijos_mutantes = []
+        for hijo in self.poblacion:
+            prob_aleatoria = random.random()
+            if prob_aleatoria <= prob_mutacion_individuo:
+                hijos_mutantes.append(hijo)
+        return hijos_mutantes
 
+    def mutacionHijos(self, prob_mutacion_gen, inicio_intervalo, final_intervalo, presicion_input):
+        hijos_mutantes = []
+        for hijo in hijos_mutantes:
+            nuevo_binario = ""
+            for bit in hijo["binario"]:
+                prob_aleatoria = random.random()
+                if prob_aleatoria <= prob_mutacion_gen:
+                    nuevo_bit = "0"
+                    if bit == "0":
+                        nuevo_bit = "1"
+                    nuevo_binario += nuevo_bit
+                else:
+                    nuevo_binario += bit
 
-    def seleccionHijosMutacion(self):
-        probabilidades_aletorio = []
+            entero_nuevo = int(nuevo_binario, 2)
+            hijo["binario"] = nuevo_binario
+            hijo["entero"] = entero_nuevo
+            hijos_mutantes.append(hijo)
 
-        for i in range(len(self.hijos)):
-            aleatorio_decimal = random.uniform(0.01, 1.0)
-            aleatorio_decimal_redondeado = round(aleatorio_decimal, 2)
-            probabilidades_aletorio.append(aleatorio_decimal_redondeado)
-
-        posicion = 0
-        self.seleccion_hijos = []
-        self.indice_hijos_seleccionados = []
-        
-        while posicion < len(self.hijos):
-            if probabilidades_aletorio[posicion] < self.prob_mutacion_individuo:
-                self.seleccion_hijos.append(self.hijos[posicion])
-                self.indice_hijos_seleccionados.append(posicion)
-                self.hijos.pop(posicion)
+        self.verificarHijos(hijos_mutantes, (inicio_intervalo, final_intervalo), presicion_input)
+    
+    def podaPoblacion(self, pob_maxima, inicio_intervalo, presicion_input, minimizar):
+        if len(self.poblacion) > pob_maxima:
+            if minimizar:
+                self.poblacion.sort(key=lambda individuo: self.calcularAptitud(self.calcularValorX(individuo["entero"], inicio_intervalo, presicion_input)))
             else:
-                posicion = posicion + 1
+                self.poblacion.sort(key=lambda individuo: self.calcularAptitud(self.calcularValorX(individuo["entero"], inicio_intervalo, presicion_input)), reverse=True)
 
-        print("HIJOS SELECCIONADOS:", self.seleccion_hijos)
+            self.poblacion = self.poblacion[:pob_maxima]
+
+    def limpiarDatos(self):
+        self.individuos = []
+        self.poblacion = []
+        self.id_individuo = 0
+        self.generacion = 0
+        self.hijos = []
+        self.generaciones = []
+        self.mejor_x_generacion = []
 
     def graficarFuncion(self):
-        # Implementación de la función para graficar la función objetivo
-        pass
+        x = np.linspace(-10, 10, num=1000)
+
+        fx = [self.calcularAptitud(i) for i in x]
+
+        plt.plot(x, fx)
+        plt.title('Función objetivo')
+        plt.xlabel('x')
+        plt.ylabel('f(x)')
+        plt.grid(True)
+        plt.show()
 
     def GraficarAptitud(self):
-        # Implementación de la función para graficar la aptitud de la población
-        pass
+        plt.plot(self.generaciones, self.mejor_x_generacion)
+        plt.title('Evolución de la aptitud de la población')
+        plt.xlabel('Generación')
+        plt.ylabel('Aptitud')
+        plt.grid(True)
+        plt.show()
+    
+    
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
